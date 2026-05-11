@@ -389,7 +389,14 @@ def make_main_cell() -> str:
     # 9. Set MAX_ATTEMPTS to 3
     src = src.replace('MAX_ATTEMPTS = 1', 'MAX_ATTEMPTS = 3')
 
-    # 10. Clean up multiple blank lines
+    # 10. Remove `if __name__ == "__main__": main()` block (notebook has a dedicated run cell)
+    src = re.sub(
+        r'\nif __name__ == "__main__":\s*\n    main\(\)\n?',
+        '',
+        src,
+    )
+
+    # 11. Clean up multiple blank lines
     src = re.sub(r'\n{3,}', '\n\n', src)
 
     return src.strip() + '\n'
