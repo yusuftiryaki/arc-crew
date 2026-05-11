@@ -41,11 +41,19 @@ CELL_INSTALL = """\
 """
 
 CELL_LOAD_MODEL = """\
-import kagglehub
+import os
 import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoProcessor, AutoModelForCausalLM, BitsAndBytesConfig
 
-_GEMMA_PATH = kagglehub.model_download("google/gemma-4/transformers/gemma-4-12b-it")
+# Competition-provided path (Kaggle); falls back to kagglehub for local runs.
+_COMPETITION_PATH = "/kaggle/input/competitions/neurogolf-2026"
+if os.path.isdir(_COMPETITION_PATH):
+    _GEMMA_PATH = _COMPETITION_PATH
+    _MODEL_ID = "gemma-4-e4b-it"
+else:
+    import kagglehub
+    _GEMMA_PATH = kagglehub.model_download("google/gemma-4/transformers/gemma-4-e4b-it")
+    _MODEL_ID = "gemma-4-e4b-it"
 
 _processor = AutoProcessor.from_pretrained(_GEMMA_PATH)
 _model = AutoModelForCausalLM.from_pretrained(
@@ -67,7 +75,7 @@ _THINK_RE = _re_lib.compile(r"<think>.*?</think>", _re_lib.DOTALL)
 
 
 class GemmaLocalLLM(BaseLLM):
-    \"\"\"crewai BaseLLM subclass wrapping the locally-loaded Gemma 4 12B model.
+    \"\"\"crewai BaseLLM subclass wrapping the locally-loaded Gemma 4 E4B model.
 
     The model and processor globals (_model, _processor) are bound via PrivateAttr
     so they are shared across all three agent instances without reloading.
@@ -78,7 +86,7 @@ class GemmaLocalLLM(BaseLLM):
     _gemma_processor: Any = PrivateAttr(default=None)
 
     def __init__(self, temperature: float = 0.2, **kwargs: Any) -> None:
-        super().__init__(model="gemma-4-12b-it", temperature=temperature, **kwargs)
+        super().__init__(model=_MODEL_ID, temperature=temperature, **kwargs)
         # Bind already-loaded globals — no reloading, zero extra VRAM.
         object.__setattr__(self, "_gemma_model", _model)
         object.__setattr__(self, "_gemma_processor", _processor)
@@ -101,16 +109,19 @@ class GemmaLocalLLM(BaseLLM):
             tokenize=False,
             add_generation_prompt=True,
             enable_thinking=True,
+            thinking_budget=512,
         )
-        inputs = self._gemma_processor(text=text, return_tensors="pt")
+        # Wrap text in a list — required by newer transformers processor API.
+        inputs = self._gemma_processor(text=[text], return_tensors="pt")
         first_device = next(self._gemma_model.parameters()).device
         inputs = {k: v.to(first_device) for k, v in inputs.items()}
         input_len = inputs["input_ids"].shape[-1]
 
+        torch.cuda.empty_cache()
         with torch.no_grad():
             output_ids = self._gemma_model.generate(
                 **inputs,
-                max_new_tokens=4096,
+                max_new_tokens=1024,
                 temperature=self.temperature if self.temperature and self.temperature > 0 else 1.0,
                 do_sample=bool(self.temperature and self.temperature > 0),
             )
@@ -119,6 +130,10 @@ class GemmaLocalLLM(BaseLLM):
             output_ids[0][input_len:],
             skip_special_tokens=False,
         )
+
+        # Free GPU memory immediately after decoding.
+        del inputs, output_ids
+        torch.cuda.empty_cache()
 
         try:
             parsed = self._gemma_processor.parse_response(raw)
@@ -396,10 +411,10 @@ main()
 # ---------------------------------------------------------------------------
 
 cells = [
-    md_cell("# ARC-AGI Crew — Kaggle Notebook (Gemma 4 12B local)"),
+    md_cell("# ARC-AGI Crew — Kaggle Notebook (Gemma 4 E4B local)"),
     md_cell("## 1. Install dependencies\n\n`kagglehub` and `transformers` are pre-installed on Kaggle."),
     code_cell(CELL_INSTALL),
-    md_cell("## 2. Load Gemma 4 12B\n\nLoaded once; shared by all three agent LLM instances."),
+    md_cell("## 2. Load Gemma 4 E4B\n\nLoaded once; shared by all three agent LLM instances."),
     code_cell(CELL_LOAD_MODEL),
     md_cell("## 3. GemmaLocalLLM — crewai BaseLLM wrapper"),
     code_cell(CELL_GEMMA_LLM),
