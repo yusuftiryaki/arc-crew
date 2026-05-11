@@ -41,19 +41,12 @@ CELL_INSTALL = """\
 """
 
 CELL_LOAD_MODEL = """\
-import os
+import kagglehub
 import torch
-from transformers import AutoProcessor, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoProcessor, AutoModelForCausalLM
 
-# Competition-provided path (Kaggle); falls back to kagglehub for local runs.
-_COMPETITION_PATH = "/kaggle/input/competitions/neurogolf-2026"
-if os.path.isdir(_COMPETITION_PATH):
-    _GEMMA_PATH = _COMPETITION_PATH
-    _MODEL_ID = "gemma-4-e4b-it"
-else:
-    import kagglehub
-    _GEMMA_PATH = kagglehub.model_download("google/gemma-4/transformers/gemma-4-e4b-it")
-    _MODEL_ID = "gemma-4-e4b-it"
+_MODEL_ID = "gemma-4-e4b-it"
+_GEMMA_PATH = kagglehub.model_download("google/gemma-4/transformers/gemma-4-e4b-it")
 
 _processor = AutoProcessor.from_pretrained(_GEMMA_PATH)
 _model = AutoModelForCausalLM.from_pretrained(
