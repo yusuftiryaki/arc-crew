@@ -37,16 +37,16 @@ def read(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 CELL_INSTALL = """\
+!pip install -U transformers torch accelerate torchvision torchaudio
 !pip install -q crewai==1.14.4 onnx onnxruntime onnx-tool scipy
 """
 
 CELL_LOAD_MODEL = """\
-import kagglehub
 import torch
 from transformers import AutoProcessor, AutoModelForCausalLM
 
 _MODEL_ID = "gemma-4-e4b-it"
-_GEMMA_PATH = kagglehub.model_download("google/gemma-4/transformers/gemma-4-e4b-it")
+_GEMMA_PATH = "/kaggle/input/models/google/gemma-4/transformers/gemma-4-e4b-it/1"
 
 _processor = AutoProcessor.from_pretrained(_GEMMA_PATH)
 _model = AutoModelForCausalLM.from_pretrained(
@@ -181,7 +181,10 @@ def make_tools_cell() -> str:
     # 4. Remove `import neurogolf_utils` (already in scope)
     src = re.sub(r'^import neurogolf_utils\n', '', src, flags=re.MULTILINE)
 
-    # 5. Clean up any resulting double blank lines
+    # 5. Replace `neurogolf_utils.X` with `X` (functions are in notebook global scope)
+    src = src.replace('neurogolf_utils.', '')
+
+    # 6. Clean up any resulting double blank lines
     src = re.sub(r'\n{3,}', '\n\n', src)
 
     return src.strip() + '\n'
